@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
@@ -21,37 +23,58 @@ type SuccessResponse struct {
 }
 
 type Brands struct {
-	ID         int
-	Name       string
-	Total_item int
+	ID         int    `json:"ID"`
+	Name       string `json:"name" validate:"required,name"`
+	Total_item int    `json:"total_item" validate:"required,total_item"`
 }
 type CartItem struct {
-	Name  string
-	Price float32
+	Name  string  `json:"name" validate:"required,name"`
+	Price float32 `json:"price" validate:"required,price"`
 }
 
 type product struct {
-	Product_Name string
-	Size         string
+	Product_Name string `json:"product_name" validate:"required,product_name"`
+	Size         string `json:"size" validate:"required,size"`
 }
 
 type userProfile struct {
-	Name    string
-	Email   string
-	Address string
+	Name    string `json:"Name" validate:"required,name"`
+	Email   string `json:email" validate:"required,email"`
+	Address string `json:address" validate:"required,address"`
 }
 
 type userinfo struct {
-	Name    string
-	Email   string
-	Address string
+	Name    string `json:"Name" validate:"required,name"`
+	Email   string `json:email" validate:"required,email"`
+	Address string `json:address" validate:"required,address"`
 }
+type User struct {
+	Email string `json:"email" validate:"required,email"`
+	Name  string `json:"name" validate:"required,min=2,max=100"`
+}
+
+// type PostCartitem struct {
+// }
+
+// type envconfig struct {
+// 	dbname   string
+// 	password string
+// }
 
 //	func handler(w http.ResponseWriter, r *http.Request) {
 //		return
 //	}
 func main() {
-	connstr := "host=localhost port=8081 dbname=postgres user=postgres password=Bimal@1998 sslmode=disable connect_timeout=10"
+
+	// envconfig := os.Getenv(".env")
+	// fmt.Print(envconfig)
+
+	// connstr := "host=localhost port=8081 dbname=envconfig user=postgres password=envconfig sslmode=disable connect_timeout=10"
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("error .env file")
+	}
+	connstr := os.Getenv("DB_CONNECTION_STRING")
 	db, err = sql.Open("postgres", connstr)
 	if err != nil {
 		panic(err)
@@ -61,16 +84,130 @@ func main() {
 	}
 	fmt.Println("connected !")
 
-	http.HandleFunc("/userprofile", getuserProfile)
-	http.HandleFunc("/userinfo", postuserinfo)
-	http.HandleFunc("/cartitem", getcartitem)
-	http.HandleFunc("/brands", getbrands)
-	http.HandleFunc("/products", getproduct)
-	http.HandleFunc("/deleteUser", deleteuser)
+	http.HandleFunc("/postcartitem", Postcartitem) //post
+	http.HandleFunc("/postbrands", Postbrands)
+	http.HandleFunc("/postproduct", Postproduct)
+	http.HandleFunc("/userprofile", getuserProfile) //GET
+	http.HandleFunc("/userinfo", postuserinfo)      //POST
+	http.HandleFunc("/cartitem", getcartitem)       //GET
+	http.HandleFunc("/brands", getbrands)           //GET
+	http.HandleFunc("/products", getproduct)        //GET
+	http.HandleFunc("/deleteUser", deleteuser)      //DELETE
 
 	log.Println("Server started on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
+
+// Post cart item Function
+func Postcartitem(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allow", http.StatusMethodNotAllowed)
+		return
+	}
+	// decoder := json.NewDecoder(r.Body)
+	// decoder.DisallowUnknownFields()
+
+	var item CartItem
+	// err := json.NewDecoder(r.Body).Decode(&item)
+	// if err != nil {
+	// 	http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	// 	return
+	// }
+
+	var payload map[string]interface{}
+	err = json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	//Iterate through payload keys to detect unrecognized fields
+	for key := range payload {
+		if key != "name" && key != "price" {
+			http.Error(w, "Invalid entry: unrecognized field(s) in payload", http.StatusBadRequest)
+			return
+		}
+	}
+	_, err = db.Exec("INSERT INTO cartitem (name, price) VALUES($1, $2)", item.Name, item.Price) //Exec executes a query without returning any rows.
+	if err != nil {
+		http.Error(w, "Unable to save the cart item", http.StatusInternalServerError)
+		return
+	}
+	response := SuccessResponse{Message: "Cart item created Successfully"}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+}
+
+// post Brands function
+func Postproduct(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allow", http.StatusMethodNotAllowed)
+		return
+	}
+	var product product
+	// err := json.NewDecoder(r.Body).Decode(&product)
+	// if err != nil {
+	// 	http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	// 	return
+	// }
+	//map is collection of key value pair where each value is unique and map to corresponding value.
+
+	//variable  for handling the validation.
+	var payloads map[string]interface{}
+	err = json.NewDecoder(r.Body).Decode(&payloads)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	//Iterate through payload keys to detect unrecognized fields
+	for key := range payloads {
+		if key != "product_name" && key != "size" {
+			http.Error(w, "Invalid entry: unrecognized field(s) in payload", http.StatusBadRequest)
+			return
+		}
+	}
+	_, err = db.Exec("INSERT INTO product (product_name, size) VALUES($1, $2)", product.Product_Name, product.Size) //Exec executes a query without returning any rows.
+	if err != nil {
+		http.Error(w, "Unable to save the product", http.StatusInternalServerError)
+		return
+	}
+	response := SuccessResponse{Message: "Products are created Successfully"}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+}
+
+//func for the post the products
+
+func Postbrands(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allow", http.StatusMethodNotAllowed)
+		return
+	}
+	var brand Brands
+	var payloads map[string]interface{}
+	err = json.NewDecoder(r.Body).Decode(&brand)
+	if err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	for key := range payloads {
+		if key != "product_name" && key != "size" {
+			http.Error(w, "Invalid entry: unrecognized field(s) in payload", http.StatusBadRequest)
+			return
+		}
+	}
+	_, err = db.Exec("INSERT INTO brands (name, total_item ) VALUES($1, $2)", brand.Name, brand.Total_item) //Exec executes a query without returning any rows.
+	if err != nil {
+		http.Error(w, "Unable to save the brand", http.StatusInternalServerError)
+		return
+	}
+	response := SuccessResponse{Message: "Brands are created Successfully"}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+}
+
+// func to get the cart item
 func getcartitem(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allow", http.StatusMethodNotAllowed)
@@ -245,6 +382,8 @@ func getproduct(w http.ResponseWriter, r *http.Request) {
 //		http.Error(w, "Database error", http.StatusInternalServerError)
 //		return
 //	}
+
+// function for get the user profile data
 func getuserProfile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -289,6 +428,7 @@ func getuserProfile(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// function for the post the user information
 func postuserinfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusInternalServerError)
@@ -296,10 +436,17 @@ func postuserinfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user userinfo
+	var payloads map[string]interface{}
 	err := json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
+	}
+	for key := range payloads {
+		if key != "product_name" && key != "size" {
+			http.Error(w, "Invalid entry: unrecognized field(s) in payload", http.StatusBadRequest)
+			return
+		}
 	}
 
 	_, err = db.Exec("INSERT INTO userprofile (name, email, address) VALUES($1, $2, $3)", user.Name, user.Email, user.Address)
